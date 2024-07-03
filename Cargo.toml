@@ -1,0 +1,12 @@
+[package]
+name = "doc-search-dsl"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["doc-search-dsl-macro"]
+
+[dependencies]
+lazy-regex = "3.1.0"
+rayon = "1.10.0"
+doc-search-dsl-macro = { path = "./doc-search-dsl-macro" }
