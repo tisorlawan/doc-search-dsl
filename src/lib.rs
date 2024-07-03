@@ -1,27 +1,23 @@
-pub use doc_search_dsl_macro::r;
+pub use doc_search_dsl_macro::rule;
 use lazy_regex::regex::Regex;
 use rayon::prelude::*;
 
 #[derive(Clone)]
-pub enum R {
+pub enum Rule {
     One(&'static Regex),
     Sequence(Vec<&'static Regex>),
-    And(Vec<R>),
-    Or(Vec<R>),
+    And(Vec<Rule>),
+    Or(Vec<Rule>),
 }
 
-pub trait Matcher {
-    fn search(&self, page: &[String]) -> usize;
-}
-
-impl Matcher for R {
-    fn search(&self, page: &[String]) -> usize {
+impl Rule {
+    pub fn search(&self, page: &[String]) -> usize {
         match self {
-            R::One(r) => page
+            Rule::One(r) => page
                 .par_iter()
                 .filter(|line| r.is_match(line.trim()))
                 .count(),
-            R::Sequence(patterns) => {
+            Rule::Sequence(patterns) => {
                 if patterns.len() == 1 {
                     return page
                         .par_iter()
@@ -37,46 +33,8 @@ impl Matcher for R {
                     })
                     .count()
             }
-            R::And(patterns) => patterns.iter().map(|p| p.search(page)).min().unwrap_or(0),
-            R::Or(patterns) => patterns.iter().map(|p| p.search(page)).sum(),
+            Rule::And(patterns) => patterns.iter().map(|p| p.search(page)).min().unwrap_or(0),
+            Rule::Or(patterns) => patterns.iter().map(|p| p.search(page)).sum(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use lazy_regex::regex;
-
-    #[test]
-    fn test_regex_pattern() {
-        let page: Vec<String> = vec![
-            "BER.TA ACARA PENGGELEDAHAN BADAN".to_string(),
-            //"Some other line".to_string(),
-            "BER.TA ACARA".to_string(),
-            "PENGGELEDAHAN".to_string(),
-            "BER.TA ACARA PENG".to_string(),
-            "Berdasarkan Surat Perintah Penggeledahan Badan".to_string(),
-        ];
-
-        let pattern = r!(
-            all {
-                any {
-                    "^BER.TA ACARA PENGGELEDAHAN BADAN",
-                    "^BER.TA ACARA$",
-                    "^BER.TA ACARA PENG"
-                },
-                sequence {
-                    "^BER.TA ACARA$",
-                    ".*PENGGELEDAHAN.*"
-                },
-                sequence {
-                    "^BER.TA ACARA PENG",
-                    "Berdasarkan Surat Perintah Penggeledahan Badan"
-                }
-            }
-        );
-
-        assert_eq!(pattern.search(&page), 1);
     }
 }

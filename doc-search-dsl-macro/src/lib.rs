@@ -3,10 +3,10 @@ use quote::{quote, ToTokens};
 use syn::{braced, parse::Parse, parse::ParseStream, parse_macro_input, Expr, Ident, Token};
 
 enum RegexPattern {
-    Any(Vec<String>),
+    Any(Vec<RegexPattern>),
     All(Vec<RegexPattern>),
-    Sequence(Vec<String>),
-    One(String),
+    Sequence(Vec<(String, String)>), // (pattern, flags) for each item in sequence
+    One(String, String),             // (pattern, flags)
 }
 
 impl Parse for RegexPattern {
@@ -17,41 +17,44 @@ impl Parse for RegexPattern {
             let content;
             braced!(content in input);
             match ident.to_string().as_str() {
-                "any" => {
-                    let patterns = content
-                        .parse_terminated(Expr::parse, Token![,])?
-                        .into_iter()
-                        .map(|expr| {
-                            if let Expr::Lit(ref lit) = expr {
-                                if let syn::Lit::Str(ref s) = lit.lit {
-                                    return Ok(s.value());
-                                }
-                            }
-                            Err(syn::Error::new_spanned(expr, "Expected string literal"))
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    Ok(RegexPattern::Any(patterns))
+                "any" | "all" => {
+                    let mut patterns = Vec::new();
+                    while !content.is_empty() {
+                        patterns.push(content.parse()?);
+                        if content.is_empty() {
+                            break;
+                        }
+                        content.parse::<Token![,]>()?;
+                    }
+                    if ident == "any" {
+                        Ok(RegexPattern::Any(patterns))
+                    } else {
+                        Ok(RegexPattern::All(patterns))
+                    }
                 }
-                "all" => {
-                    let patterns = content
-                        .parse_terminated(RegexPattern::parse, Token![,])?
-                        .into_iter()
-                        .collect();
-                    Ok(RegexPattern::All(patterns))
-                }
-                "sequence" => {
-                    let patterns = content
-                        .parse_terminated(Expr::parse, Token![,])?
-                        .into_iter()
-                        .map(|expr| {
-                            if let Expr::Lit(ref lit) = expr {
-                                if let syn::Lit::Str(ref s) = lit.lit {
-                                    return Ok(s.value());
-                                }
+                "sequence" | "seq" => {
+                    let mut patterns = Vec::new();
+                    while !content.is_empty() {
+                        let expr: Expr = content.parse()?;
+                        if let Expr::Lit(ref lit) = expr {
+                            if let syn::Lit::Str(ref s) = lit.lit {
+                                let pattern = s.value();
+                                let flags = s.suffix().to_owned();
+                                patterns.push((pattern, flags));
+                            } else {
+                                return Err(syn::Error::new_spanned(
+                                    expr,
+                                    "Expected string literal",
+                                ));
                             }
-                            Err(syn::Error::new_spanned(expr, "Expected string literal"))
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
+                        } else {
+                            return Err(syn::Error::new_spanned(expr, "Expected string literal"));
+                        }
+                        if content.is_empty() {
+                            break;
+                        }
+                        content.parse::<Token![,]>()?;
+                    }
                     Ok(RegexPattern::Sequence(patterns))
                 }
                 _ => Err(syn::Error::new(ident.span(), "Unknown identifier")),
@@ -60,7 +63,9 @@ impl Parse for RegexPattern {
             let expr: Expr = input.parse()?;
             if let Expr::Lit(ref lit) = expr {
                 if let syn::Lit::Str(ref s) = lit.lit {
-                    return Ok(RegexPattern::One(s.value()));
+                    let pattern = s.value();
+                    let flags = s.suffix().to_owned();
+                    return Ok(RegexPattern::One(pattern, flags));
                 }
             }
             Err(syn::Error::new_spanned(expr, "Expected string literal"))
@@ -72,25 +77,40 @@ impl ToTokens for RegexPattern {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
             RegexPattern::Any(patterns) => {
-                let patterns = patterns.iter().map(|p| quote! { R::One(regex!(#p)) });
+                let patterns = patterns.iter().map(|p| quote! { #p });
                 quote! {
-                    R::Or(vec![#(#patterns),*])
+                    Rule::Or(vec![#(#patterns),*])
                 }
             }
             RegexPattern::All(patterns) => {
                 let patterns = patterns.iter().map(|p| quote! { #p });
                 quote! {
-                    R::And(vec![#(#patterns),*])
+                    Rule::And(vec![#(#patterns),*])
                 }
             }
             RegexPattern::Sequence(patterns) => {
+                let patterns = patterns.iter().map(|(p, f)| {
+                    let regex_str = if f.is_empty() {
+                        quote! { #p }
+                    } else {
+                        let regex_with_flags = format!("(?{}){}", f, p);
+                        quote! { #regex_with_flags }
+                    };
+                    quote! { lazy_regex::regex!(#regex_str) }
+                });
                 quote! {
-                    R::Sequence(vec![#(regex!(#patterns)),*])
+                    Rule::Sequence(vec![#(#patterns),*])
                 }
             }
-            RegexPattern::One(pattern) => {
+            RegexPattern::One(pattern, flags) => {
+                let regex_str = if flags.is_empty() {
+                    quote! { #pattern }
+                } else {
+                    let regex_with_flags = format!("(?{}){}", flags, pattern);
+                    quote! { #regex_with_flags }
+                };
                 quote! {
-                    R::One(regex!(#pattern))
+                    Rule::One(lazy_regex::regex!(#regex_str))
                 }
             }
         }
@@ -99,7 +119,7 @@ impl ToTokens for RegexPattern {
 }
 
 #[proc_macro]
-pub fn r(input: TokenStream) -> TokenStream {
+pub fn rule(input: TokenStream) -> TokenStream {
     let pattern = parse_macro_input!(input as RegexPattern);
     quote! { #pattern }.into()
 }
