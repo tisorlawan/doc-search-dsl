@@ -2,11 +2,13 @@
 name = "doc-search-dsl"
 version = "0.1.0"
 edition = "2021"
+description = "A Rust procedural macro for creating complex regex patterns using a Domain-Specific Language (DSL)."
+license = "MIT"
 
 [workspace]
 members = ["doc-search-dsl-macro"]
 
 [dependencies]
-lazy-regex = "3.1.0"
 rayon = "1.10.0"
-doc-search-dsl-macro = { path = "./doc-search-dsl-macro" }
+doc-search-dsl-macro = { version = "0.1.0" }
+lazy-regex = "3.2.0"

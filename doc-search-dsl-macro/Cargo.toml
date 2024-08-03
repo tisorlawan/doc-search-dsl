@@ -2,6 +2,9 @@
 name = "doc-search-dsl-macro"
 version = "0.1.0"
 edition = "2021"
+description = "A procedural macro for implementing a document search domain-specific language"
+license = "MIT"
+
 
 [lib]
 proc-macro = true

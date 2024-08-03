@@ -1,22 +1,21 @@
-use doc_search_dsl::{rule, Rule};
+use doc_search_dsl::{pat, Rule};
 
 fn main() {
-    let page: Vec<String> = vec![
-        "Hi".to_string(),
-        "This is Jack".to_string(),
-        "I want you to know".to_string(),
-        "That i will be back tomorrow".to_string(),
+    let content = vec![
+        "Once upon a midnight dreary, while I pondered, weak and weary,",
+        "Over many a quaint and curious volume of forgotten lore—",
+        "While I nodded, nearly napping, suddenly there came a tapping,",
+        "As of some one gently rapping, rapping at my chamber door.",
+        "''Tis some visitor,' I muttered, 'tapping at my chamber door—",
+        "Only this and nothing more.'",
     ];
 
-    let pattern = rule! {
-        any {
-            r"\bHi\b"i,
-            all {
-                "this is"i,
-                "will be",
-            }
+    let p = pat! {
+        all {
+            "nodded",
+            "WHILE",
+            "nothing"
         }
     };
-
-    assert_eq!(pattern.search(&page), 2);
+    println!("{}", p.occurances(&content));
 }

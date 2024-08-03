@@ -119,7 +119,7 @@ impl ToTokens for RegexPattern {
 }
 
 #[proc_macro]
-pub fn rule(input: TokenStream) -> TokenStream {
+pub fn pat(input: TokenStream) -> TokenStream {
     let pattern = parse_macro_input!(input as RegexPattern);
     quote! { #pattern }.into()
 }

@@ -1,4 +1,4 @@
-pub use doc_search_dsl_macro::rule;
+pub use doc_search_dsl_macro::pat;
 use lazy_regex::regex::Regex;
 use rayon::prelude::*;
 
@@ -11,7 +11,8 @@ pub enum Rule {
 }
 
 impl Rule {
-    pub fn search(&self, page: &[String]) -> usize {
+    pub fn occurances<S: AsRef<str>>(&self, page: &[S]) -> usize {
+        let page: Vec<_> = page.iter().map(|s| s.as_ref()).collect();
         match self {
             Rule::One(r) => page
                 .par_iter()
@@ -33,8 +34,12 @@ impl Rule {
                     })
                     .count()
             }
-            Rule::And(patterns) => patterns.iter().map(|p| p.search(page)).min().unwrap_or(0),
-            Rule::Or(patterns) => patterns.iter().map(|p| p.search(page)).sum(),
+            Rule::And(patterns) => patterns
+                .iter()
+                .map(|p| p.occurances(&page))
+                .min()
+                .unwrap_or(0),
+            Rule::Or(patterns) => patterns.iter().map(|p| p.occurances(&page)).sum(),
         }
     }
 }
